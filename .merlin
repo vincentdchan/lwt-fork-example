@@ -1,0 +1,4 @@
+S src/**
+B _build/**
+
+PKG core core_kernel yojson ppx_let ppx_deriving_yojson core_kernel lwt lwt_ppx cohttp cohttp-lwt-unix re

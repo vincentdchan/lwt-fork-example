@@ -1,0 +1,10 @@
+{
+  "slack_webhook": "https://hooks.slack.com/services/",
+  "entries": [
+    {
+      "name": "backend",
+      "work_dir": "",
+      "start_script": "yarn start"
+    }
+  ]
+}
