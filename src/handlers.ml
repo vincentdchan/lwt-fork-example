@@ -66,7 +66,6 @@ let bot_list_all_repos_handler = (
     let pid = Lwt_unix.fork () in
 
     if pid <> 0 then
-      let%lwt () = assert_urlencoded_content_type request "application/x-www-form-urlencoded" in
       let%lwt attachments =
         Lwt_list.map_p
           (fun { name; work_dir } ->
