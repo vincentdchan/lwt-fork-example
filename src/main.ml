@@ -60,7 +60,7 @@ end
 
 type handler = Context.t -> (Cohttp.Response.t * Cohttp_lwt__Body.t) Lwt.t
 
-type route = Re.Pcre.regexp * handler
+type route = string * handler
 
 module Form_UrlEncoded = struct
   include Hashtbl
@@ -132,7 +132,7 @@ end
 
 (* send all the services to Slack *)
 let bot_list_all_repos_handler = (
-  Re.Pcre.regexp "^/command/list$",
+  "/command/list",
   fun { Context. request; config; cli_mutex } ->
     let open Slack.Response in
     let open Config in
@@ -214,7 +214,7 @@ let server port =
       routes
       ~init:None
       ~f: (fun _ (path_reg, hand) ->
-          if Re.Pcre.pmatch path_reg path then
+          if String.equal path_reg path then
             Stop (Some hand)
           else
             Continue None
