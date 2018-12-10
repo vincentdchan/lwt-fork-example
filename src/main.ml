@@ -5,7 +5,191 @@ open Cohttp
 open Cohttp_lwt_unix
 open Core
 open Core_kernel
-open Util
+
+module Config = struct
+  open Yojson
+  type service = {
+    name: string;
+    work_dir: string;
+    start_script: string;
+  } [@@deriving yojson]
+
+  type config = {
+    slack_webhook: string;
+    timeout: (float [@default 5.]);
+    entries: service list;
+  } [@@deriving yojson]
+
+  let find_service_by_name { entries } name : service option =
+    List.filter entries (
+      fun service -> String.equal service.name name
+    )
+    |> List.hd
+end
+
+module Server = struct
+  include Cohttp_lwt_unix.Server
+
+  let respond_json ~body () =
+    let headers = Header.init_with "Content-type" "application/json" in
+    let body = body |> Yojson.Safe.to_string in
+    respond_string ~headers ~status:`OK ~body ()
+
+end
+
+exception ContentTypeError of (string * string)
+
+let assert_urlencoded_content_type req expect =
+  let headers = req |> Request.headers in
+  let content_type = Header.get headers "Content-Type"
+                     |> (Option.value ~default:"not found")
+  in
+  if String.equal content_type expect then
+    Lwt.return()
+  else
+    raise (ContentTypeError (expect, content_type))
+
+module Context = struct
+  type t = {
+    request: Request.t;
+    config: Config.config;
+    body: Cohttp_lwt.Body.t;
+    cli_mutex: Lwt_mutex.t;
+  }
+end
+
+type handler = Context.t -> (Cohttp.Response.t * Cohttp_lwt__Body.t) Lwt.t
+
+type route = Re.Pcre.regexp * handler
+
+module Form_UrlEncoded = struct
+  include Hashtbl
+
+  exception FieldNotFound of string
+  exception DuplicateKey of string
+
+  let find_exn data name =
+    match find data name with
+    | Some value -> value
+    | None -> raise (FieldNotFound name)
+
+  let add_exn data key value =
+    match add data key value with
+    |`Duplicate -> raise (DuplicateKey key)
+    |`Ok -> ()
+
+  let create () = Hashtbl.create (module String)
+
+  let from_string (content: string) =
+    let data = String.split ~on:'&' content in
+    let table = create () in
+
+    List.fold_until
+      data
+      ~init:table
+      ~f:(fun acc str ->
+        match String.split ~on:'=' str with
+        | key::value::[] ->
+            add_exn acc key value;
+            Continue table
+        | _ ->
+          Stop table
+      )
+      ~finish:(fun result -> result)
+
+  let from_tuples tuples =
+    let result = create () in
+
+    List.iter tuples ~f:(
+      fun (key, value) -> add_exn result key value
+    );
+
+    result
+
+end
+
+module Slack = struct
+  type error = {
+    response_type: string;
+    text: string;
+  } [@@deriving yojson]
+
+  module Response = struct
+
+    type message = {
+      text: string;
+    } [@@deriving yojson]
+
+    type command_resp = {
+        response_type: string;
+        text: string;
+        attachments: message list;
+    } [@@deriving yojson]
+
+  end
+end
+
+
+(* send all the services to Slack *)
+let bot_list_all_repos_handler = (
+  Re.Pcre.regexp "^/command/list$",
+  fun { Context. request; config; cli_mutex } ->
+    let open Slack.Response in
+    let open Config in
+
+    let pid = Lwt_unix.fork () in
+
+    if pid <> 0 then
+      let%lwt attachments =
+        Lwt_list.map_p
+          (fun { name; work_dir } ->
+            Lwt_mutex.with_lock cli_mutex (fun () ->
+              let open Config in
+
+              let text = "something" in
+              Lwt.return { text }
+              )
+          )
+          config.entries
+      in
+      let resp =
+        {
+          response_type = "in_channel";
+          text = "List of all repos:";
+          attachments;
+        }
+      in
+      let body = resp |> Slack.Response.command_resp_to_yojson in
+      Server.respond_json ~body ()
+    else
+      begin
+        printf "pid: %d" pid;
+        let fst = List.hd_exn config.entries in
+        let headers = Header.add
+            (Header.init ())
+            "Content-Type" "application/json"
+        in
+        let body =
+          Slack.Response.(
+            {
+              text =
+                Printf.sprintf "Repo %s has been updated by %s" fst.name "xixi";
+            }
+            |> message_to_yojson
+            |> Yojson.Safe.to_string
+            |> Cohttp_lwt.Body.of_string
+          )
+        in
+        let%lwt _ = Client.post ~body ~headers (Uri.of_string config.slack_webhook) in
+        Pervasives.exit(0)
+      end
+
+)
+
+
+let routes: route array = [|
+  bot_list_all_repos_handler;
+|]
 
 let log_request req status =
   let open Unix in
@@ -25,8 +209,6 @@ let server port =
   let callback _conn req body =
 
     let path = req |> Request.uri |> Uri.path in
-
-    let open Handlers in
 
     let handler_opt : handler option = Array.fold_until
       routes
