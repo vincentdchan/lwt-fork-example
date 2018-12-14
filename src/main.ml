@@ -187,9 +187,9 @@ let bot_list_all_repos_handler = (
 )
 
 
-let routes: route array = [|
+let routes: route list = [
   bot_list_all_repos_handler;
-|]
+]
 
 let log_request req status =
   let open Unix in
@@ -210,7 +210,7 @@ let server port =
 
     let path = req |> Request.uri |> Uri.path in
 
-    let handler_opt : handler option = Array.fold_until
+    let handler_opt : handler option = List.fold_until
       routes
       ~init:None
       ~f: (fun _ (path_reg, hand) ->
@@ -274,30 +274,5 @@ let server port =
   let%lwt _ = Lwt_io.printf "Start server at localhost:%d...\n" port in
   Server.create ~mode:(`TCP (`Port port)) (Server.make ~callback ())
 
-let command =
-  Command.basic
-    ~summary:"God's in his heaven, all right with the world"
-    Command.Let_syntax.(
-      let%map_open
-        verbose = flag "-verbose" no_arg
-          ~doc:"bool Determine if show verbose logs"
-      in
-      fun () ->
-        if verbose then
-          begin
-            Lwt_log.default :=
-              Lwt_log.channel
-                ~template:"$(date).$(milliseconds) [$(level)] $(message)"
-                ~close_mode:`Keep
-                ~channel:Lwt_io.stdout
-                ();
-
-            Lwt_log.add_rule "*" Lwt_log.Info;
-          end
-        else
-          ()
-    )
-
 let () =
-  Command.run ~version:"1.0" command;
   ignore (Lwt_main.run (server 8000))
