@@ -3,7 +3,6 @@ open Lwt_io
 open Lwt_log
 open Cohttp
 open Cohttp_lwt_unix
-open Core
 open Core_kernel
 open Cohttp_lwt_unix.Server
 

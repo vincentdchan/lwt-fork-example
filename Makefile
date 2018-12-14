@@ -28,4 +28,4 @@ test: native
 	./main.native "OCaml" "OCamlBuild" "users"
 
 install-dep:
-	opam install core core_kernel lwt ppx_deriving_yojson yojson cohttp
+	opam install core_kernel lwt ppx_deriving_yojson yojson cohttp

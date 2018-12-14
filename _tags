@@ -1,2 +1,2 @@
-true: package(core), package(core_kernel), package(ppx_deriving_yojson), package(yojson), package(lwt_ppx), package(cohttp), package(cohttp-lwt-unix), package(ppx_let)
+true: package(core_kernel), package(ppx_deriving_yojson), package(yojson), package(lwt_ppx), package(cohttp), package(cohttp-lwt-unix), package(ppx_let)
 true: thread
